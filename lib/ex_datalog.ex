@@ -1,18 +1,115 @@
 defmodule ExDatalog do
-  @moduledoc """
-  Documentation for `ExDatalog`.
-  """
+  defstruct rules: [], facts: %{}
 
-  @doc """
-  Hello world.
+  alias ExDatalog.{Fact, Rule}
+  alias __MODULE__
 
-  ## Examples
+  def new, do: %__MODULE__{}
 
-      iex> ExDatalog.hello()
-      :world
-
-  """
-  def hello do
-    :world
+  def add_rule(%ExDatalog{rules: rules} = exDatalog, %Rule{} = rule) do
+    {:ok, %ExDatalog{exDatalog | rules: [rule | rules]}}
   end
+
+  def add_rule(_, _), do: {:error, :invalid_rule}
+
+  def add_fact(%ExDatalog{facts: facts} = exDatalog, %Fact{} = fact) do
+    updated_facts = Map.put(facts, fact_key(fact), fact)
+    {:ok, %ExDatalog{exDatalog | facts: updated_facts}}
+  end
+
+  def add_fact(_, _), do: {:error, :invalid_fact}
+
+  def evaluate_query(%ExDatalog{rules: rules, facts: facts}, query_params) do
+    matching_rules = get_matching_rules(rules, query_params[:rule])
+    {:ok, apply_rules(facts, matching_rules, query_params[:rule])}
+  end
+
+  def evaluate_query(_, _), do: {:error, :invalid_ExDatalog}
+
+  defp get_matching_rules(rules, nil), do: rules
+
+  defp get_matching_rules(rules, relation) do
+    Enum.filter(rules, fn rule -> rule.name == relation end)
+  end
+
+  defp apply_rules(facts, rules, query_rule) do
+    iter_apply_rules(facts, rules, query_rule, %{}, %{})
+  end
+
+  defp iter_apply_rules(all_facts, rules, query_rule, derived, seen, previous_derived \\ %{}) do
+    # Create tasks for each fact in all_facts
+    tasks =
+      Map.keys(all_facts)
+      |> Enum.map(fn fact_key ->
+        fact = Map.fetch!(all_facts, fact_key)
+
+        Task.async(fn ->
+          Enum.reduce(all_facts, {Map.new(), derived}, fn {_, existing_fact}, {acc, d_acc} ->
+            process_fact(fact, existing_fact, rules, acc, d_acc)
+          end)
+        end)
+      end)
+
+    # Wait for all tasks to complete and collect the results
+    {new_facts, new_derived} =
+      tasks
+      |> Task.await_many()
+      |> Enum.reduce({%{}, derived}, fn {fact_new_facts, fact_derived}, {acc, d_acc} ->
+        {Map.merge(acc, fact_new_facts), Map.merge(d_acc, fact_derived)}
+      end)
+
+    updated_seen = update_seen(new_facts, seen)
+
+    # Check if no new facts are derived
+    if new_derived == previous_derived do
+      if query_rule do
+        Map.values(new_derived)
+      else
+        Map.values(all_facts)
+      end
+    else
+      new_total_facts = Map.merge(all_facts, new_derived)
+      iter_apply_rules(new_total_facts, rules, query_rule, %{}, updated_seen, new_derived)
+    end
+  end
+
+  defp update_seen(new_facts, seen) do
+    Map.merge(seen, new_facts, fn _, _, new -> new end)
+  end
+
+  defp fact_key(fact) do
+    {fact.object_id, fact.subject_id, fact.object_relation}
+  end
+
+  defp process_fact(fact1, fact2, rules, acc, derived) do
+    Enum.reduce(rules, {acc, derived}, fn rule, {acc_inner, derived_inner} ->
+      apply_rule(fact1, fact2, rule, acc_inner, derived_inner)
+    end)
+  end
+
+  defp apply_rule(fact1, fact2, %Rule{rule: rule_fn}, acc, derived) do
+    case apply_rule_fn(rule_fn, fact1, fact2) do
+      nil ->
+        {acc, derived}
+
+      new_fact ->
+        fact_key = fact_key(new_fact)
+
+        if Map.has_key?(acc, fact_key) do
+          {acc, derived}
+        else
+          {Map.put(acc, fact_key, new_fact), Map.put(derived, fact_key, new_fact)}
+        end
+    end
+  rescue
+    FunctionClauseError -> {acc, derived}
+  end
+
+  defp apply_rule_fn(rule_fn, fact1, _fact2) when is_function(rule_fn, 1),
+    do: apply(rule_fn, [fact1])
+
+  defp apply_rule_fn(rule_fn, fact1, fact2) when is_function(rule_fn, 2),
+    do: apply(rule_fn, [fact1, fact2])
+
+  defp apply_rule_fn(_, _, _), do: nil
 end
