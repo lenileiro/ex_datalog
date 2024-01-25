@@ -288,8 +288,10 @@ defmodule ExExDatalogTest do
     test "efficient handling of large numbers of rules and facts", %{datalog: datalog} do
       # Generate a large number of rules
       datalog =
-        Enum.reduce(1..1000, datalog, fn i, acc ->
-          rule_fn = fn %Fact{object_id: id} ->
+        Enum.reduce(1..10_000, datalog, fn i, acc ->
+          object_relation = "processed_#{i}"
+
+          rule_fn = fn %Fact{object_id: id, object_relation: ^object_relation} ->
             %Fact{object_id: id, object_relation: "processed_#{i}"}
           end
 
@@ -303,8 +305,8 @@ defmodule ExExDatalogTest do
 
       # Generate a large number of facts
       datalog =
-        Enum.reduce(1..1000, datalog, fn j, acc ->
-          fact = %Fact{object_id: "object_#{j}"}
+        Enum.reduce(1..10_000, datalog, fn j, acc ->
+          fact = %Fact{object_id: "object_#{j}", object_relation: "processed_#{j}"}
 
           case ExDatalog.add_fact(acc, fact) do
             {:ok, updated_datalog} -> updated_datalog
@@ -313,14 +315,20 @@ defmodule ExExDatalogTest do
         end)
 
       # Evaluate a query that triggers one specific rule
-      query_params = %{rule: "rule_500"}
+      query_params = %{rule: "rule_5000"}
       {:ok, results} = ExDatalog.evaluate_query(datalog, query_params)
 
       # Define expected results
-      expected_result =
-        Enum.map(1..1000, fn j ->
-          %Fact{object_id: "object_#{j}", object_relation: "processed_500"}
-        end)
+      expected_result = [
+        %ExDatalog.Fact{
+          object_id: "object_5000",
+          object_namespace: nil,
+          object_relation: "processed_5000",
+          subject_id: nil,
+          subject_namespace: nil,
+          subject_relation: nil
+        }
+      ]
 
       # Assert that the actual results match the expected results
       assert Enum.sort(results) == Enum.sort(expected_result)

@@ -37,24 +37,26 @@ defmodule ExDatalog do
   end
 
   defp iter_apply_rules(all_facts, rules, query_rule, derived, seen, previous_derived \\ %{}) do
-    # Create tasks for each fact in all_facts
-    tasks =
-      Map.keys(all_facts)
-      |> Enum.map(fn fact_key ->
-        fact = Map.fetch!(all_facts, fact_key)
+    fact_chunks =
+      Map.keys(all_facts) |> Enum.chunk_every(500) |> Enum.reject(&Map.has_key?(seen, &1))
 
-        Task.async(fn ->
-          Enum.reduce(all_facts, {Map.new(), derived}, fn {_, existing_fact}, {acc, d_acc} ->
-            process_fact(fact, existing_fact, rules, acc, d_acc)
+    # Limit the number of concurrent tasks
+    max_concurrency = 10
+
+    results =
+      fact_chunks
+      |> Enum.chunk_every(max_concurrency)
+      |> Enum.flat_map(fn chunk_group ->
+        Enum.map(chunk_group, fn chunk ->
+          Task.async(fn ->
+            process_fact_chunk(chunk, all_facts, rules, derived)
           end)
         end)
+        |> Task.await_many()
       end)
 
-    # Wait for all tasks to complete and collect the results
     {new_facts, new_derived} =
-      tasks
-      |> Task.await_many()
-      |> Enum.reduce({%{}, derived}, fn {fact_new_facts, fact_derived}, {acc, d_acc} ->
+      Enum.reduce(results, {%{}, derived}, fn {fact_new_facts, fact_derived}, {acc, d_acc} ->
         {Map.merge(acc, fact_new_facts), Map.merge(d_acc, fact_derived)}
       end)
 
@@ -71,6 +73,16 @@ defmodule ExDatalog do
       new_total_facts = Map.merge(all_facts, new_derived)
       iter_apply_rules(new_total_facts, rules, query_rule, %{}, updated_seen, new_derived)
     end
+  end
+
+  defp process_fact_chunk(chunk, all_facts, rules, derived) do
+    Enum.reduce(chunk, {Map.new(), derived}, fn fact_key, {acc, d_acc} ->
+      fact = Map.fetch!(all_facts, fact_key)
+
+      Enum.reduce(all_facts, {acc, d_acc}, fn {_, existing_fact}, {acc_inner, d_acc_inner} ->
+        process_fact(fact, existing_fact, rules, acc_inner, d_acc_inner)
+      end)
+    end)
   end
 
   defp update_seen(new_facts, seen) do
