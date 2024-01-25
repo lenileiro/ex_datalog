@@ -38,25 +38,28 @@ defmodule ExDatalog do
 
   defp iter_apply_rules(all_facts, rules, query_rule, derived, seen, previous_derived \\ %{}) do
     fact_chunks =
-      Map.keys(all_facts) |> Enum.chunk_every(500) |> Enum.reject(&Map.has_key?(seen, &1))
+      Map.keys(all_facts) |> Stream.chunk_every(500) |> Stream.reject(&Map.has_key?(seen, &1))
 
     # Limit the number of concurrent tasks
-    max_concurrency = 10
-
-    results =
-      fact_chunks
-      |> Enum.chunk_every(max_concurrency)
-      |> Enum.flat_map(fn chunk_group ->
-        Enum.map(chunk_group, fn chunk ->
-          Task.async(fn ->
-            process_fact_chunk(chunk, all_facts, rules, derived)
-          end)
-        end)
-        |> Task.await_many()
-      end)
+    max_concurrency = 100
+    task_timeout = 30_000
 
     {new_facts, new_derived} =
-      Enum.reduce(results, {%{}, derived}, fn {fact_new_facts, fact_derived}, {acc, d_acc} ->
+      fact_chunks
+      |> Stream.chunk_every(max_concurrency)
+      |> Enum.map(fn chunk_group ->
+        Task.async(fn ->
+          Task.async_stream(
+            chunk_group,
+            fn chunk -> process_fact_chunk(chunk, all_facts, rules, derived) end,
+            timeout: task_timeout
+          )
+          |> Enum.to_list()
+        end)
+      end)
+      |> Task.await_many(task_timeout)
+      |> List.flatten()
+      |> Enum.reduce({%{}, derived}, fn {:ok, {fact_new_facts, fact_derived}}, {acc, d_acc} ->
         {Map.merge(acc, fact_new_facts), Map.merge(d_acc, fact_derived)}
       end)
 
