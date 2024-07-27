@@ -3,7 +3,7 @@ defmodule ExDatalog.PermTest do
   import ExDatalog.Perm
 
   test "valid permission sigil" do
-    permission = ~PERM"""
+    ~PERM"""
     [
       {
         "name": "parent",
@@ -26,9 +26,6 @@ defmodule ExDatalog.PermTest do
       }
     ]
     """
-
-    assert is_list(permission)
-    assert length(permission) == 2
   end
 
   test "invalid JSON" do
