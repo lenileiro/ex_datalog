@@ -689,5 +689,133 @@ defmodule ExExDatalogTest do
 
       assert Enum.sort(results) == Enum.sort(expected_results)
     end
+
+    test "rules with wildcard are evaluated correctly", %{datalog: datalog} do
+      parent_rule_fn = fn
+        %Fact{object_id: object_id, subject_id: subject_id, object_relation: "parent"} ->
+          %Fact{
+            object_id: object_id,
+            subject_id: subject_id,
+            object_relation: "parent"
+          }
+      end
+
+      parent_rule = %Rule{name: "parent", function: parent_rule_fn}
+      {:ok, datalog} = ExDatalog.add_rule(datalog, parent_rule)
+
+      ancestor_rule_fn_1 = fn
+        %Fact{object_id: object_id, subject_id: subject_id, object_relation: "ancestor"} ->
+          %Fact{
+            object_id: object_id,
+            subject_id: subject_id,
+            object_relation: "ancestor"
+          }
+      end
+
+      ancestor_rule_fn_2 = fn
+        %Fact{object_id: grandparent, subject_id: parent, object_relation: "parent"},
+        %Fact{object_id: parent, subject_id: descendant, object_relation: "parent"} ->
+          %Fact{
+            object_id: grandparent,
+            subject_id: descendant,
+            object_relation: "ancestor"
+          }
+      end
+
+      ancestor_rule_fn_3 = fn
+        %Fact{object_id: object_id, subject_id: parent, object_relation: "parent"},
+        %Fact{object_id: parent, subject_id: subject_id, object_relation: "ancestor"} ->
+          %Fact{
+            object_id: object_id,
+            subject_id: subject_id,
+            object_relation: "ancestor"
+          }
+      end
+
+      ancestor_rule_1 = %Rule{name: "ancestor", function: ancestor_rule_fn_1}
+      ancestor_rule_2 = %Rule{name: "ancestor", function: ancestor_rule_fn_2}
+      ancestor_rule_3 = %Rule{name: "ancestor", function: ancestor_rule_fn_3}
+
+      {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule_1)
+      {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule_2)
+      {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule_3)
+
+      {:ok, datalog} =
+        ExDatalog.add_fact(datalog, %Fact{
+          object_id: "Alice",
+          subject_id: "Bob",
+          object_relation: "parent"
+        })
+
+      {:ok, datalog} =
+        ExDatalog.add_fact(datalog, %Fact{
+          object_id: "Bob",
+          subject_id: "Charlie",
+          object_relation: "parent"
+        })
+
+      {:ok, datalog} =
+        ExDatalog.add_fact(datalog, %Fact{
+          object_id: "Charlie",
+          subject_id: "Daisy",
+          object_relation: "parent"
+        })
+
+      query_params = %{rule: "*"}
+      {:ok, results} = ExDatalog.evaluate_query(datalog, query_params)
+
+      expected_results = [
+        %ExDatalog.Fact{
+          object_id: "Alice",
+          object_namespace: nil,
+          object_relation: "ancestor",
+          subject_id: "Charlie",
+          subject_namespace: nil,
+          subject_relation: nil
+        },
+        %ExDatalog.Fact{
+          object_id: "Alice",
+          object_namespace: nil,
+          object_relation: "ancestor",
+          subject_id: "Daisy",
+          subject_namespace: nil,
+          subject_relation: nil
+        },
+        %ExDatalog.Fact{
+          object_namespace: nil,
+          object_id: "Alice",
+          object_relation: "parent",
+          subject_namespace: nil,
+          subject_id: "Bob",
+          subject_relation: nil
+        },
+        %ExDatalog.Fact{
+          object_id: "Bob",
+          object_namespace: nil,
+          object_relation: "ancestor",
+          subject_id: "Daisy",
+          subject_namespace: nil,
+          subject_relation: nil
+        },
+        %ExDatalog.Fact{
+          object_namespace: nil,
+          object_id: "Bob",
+          object_relation: "parent",
+          subject_namespace: nil,
+          subject_id: "Charlie",
+          subject_relation: nil
+        },
+        %ExDatalog.Fact{
+          object_namespace: nil,
+          object_id: "Charlie",
+          object_relation: "parent",
+          subject_namespace: nil,
+          subject_id: "Daisy",
+          subject_relation: nil
+        }
+      ]
+
+      assert Enum.sort(results) == Enum.sort(expected_results)
+    end
   end
 end

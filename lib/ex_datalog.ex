@@ -35,7 +35,7 @@ defmodule ExDatalog do
     matching_rules = get_matching_rules(rules, rule)
     initial_facts = MapSet.new(Map.values(facts))
 
-    if Enum.empty?(matching_rules) do
+    if Enum.empty?(matching_rules) and rule != "*" do
       {:ok, []}
     else
       all_facts = apply_rules(initial_facts, matching_rules)
@@ -46,6 +46,7 @@ defmodule ExDatalog do
 
   def evaluate_query(_, _), do: {:error, :invalid_ExDatalog}
 
+  defp get_matching_rules(rules, "*"), do: rules
   defp get_matching_rules(rules, nil), do: rules
   defp get_matching_rules(rules, rule), do: Enum.filter(rules, &(&1.name == to_string(rule)))
 
