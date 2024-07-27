@@ -31,22 +31,27 @@ defmodule ExDatalog do
 
   def add_fact(_, _), do: {:error, :invalid_fact}
 
-  def evaluate_query(%ExDatalog{rules: rules, facts: facts}, query_params) do
-    matching_rules = get_matching_rules(rules, query_params[:rule])
+  def evaluate_query(%ExDatalog{rules: rules, facts: facts}, %{rule: rule} = query) do
+    matching_rules = get_matching_rules(rules, rule)
+
     initial_facts = MapSet.new(Map.values(facts))
+
     all_facts = apply_rules(initial_facts, matching_rules)
+
     derived_facts = MapSet.difference(all_facts, initial_facts)
 
-    result =
-      case query_params[:rule] do
-        nil -> MapSet.to_list(all_facts)
-        _rule -> MapSet.to_list(derived_facts)
-      end
-
-    {:ok, result}
+    {:ok, MapSet.to_list(apply_where_clause(derived_facts, query[:where]))}
   end
 
   def evaluate_query(_, _), do: {:error, :invalid_ExDatalog}
+
+  defp apply_where_clause(facts, nil), do: facts
+
+  defp apply_where_clause(facts, where_clause) do
+    MapSet.filter(facts, fn fact ->
+      Enum.all?(where_clause, fn {key, value} -> Map.get(fact, key) == value end)
+    end)
+  end
 
   defp get_matching_rules(rules, nil), do: rules
 
