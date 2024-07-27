@@ -13,7 +13,8 @@ defmodule ExDatalog do
   def add_rule(_, _), do: {:error, :invalid_rule}
 
   def add_fact(%ExDatalog{facts: facts} = exDatalog, %Fact{} = fact) do
-    updated_facts = Map.put(facts, fact_key(fact), fact)
+    fact_key = fact_key(fact)
+    updated_facts = Map.put(facts, fact_key, fact)
     {:ok, %ExDatalog{exDatalog | facts: updated_facts}}
   end
 
@@ -21,7 +22,17 @@ defmodule ExDatalog do
 
   def evaluate_query(%ExDatalog{rules: rules, facts: facts}, query_params) do
     matching_rules = get_matching_rules(rules, query_params[:rule])
-    {:ok, apply_rules(facts, matching_rules, query_params[:rule])}
+    initial_facts = MapSet.new(Map.values(facts))
+    all_facts = apply_rules(initial_facts, matching_rules)
+    derived_facts = MapSet.difference(all_facts, initial_facts)
+
+    result =
+      case query_params[:rule] do
+        nil -> MapSet.to_list(all_facts)
+        _rule -> MapSet.to_list(derived_facts)
+      end
+
+    {:ok, result}
   end
 
   def evaluate_query(_, _), do: {:error, :invalid_ExDatalog}
@@ -32,99 +43,61 @@ defmodule ExDatalog do
     Enum.filter(rules, fn rule -> rule.name == relation end)
   end
 
-  defp apply_rules(facts, rules, query_rule) do
-    iter_apply_rules(facts, rules, query_rule, %{}, %{})
+  defp apply_rules(facts, rules) do
+    Stream.iterate(facts, &apply_rules_once(&1, rules))
+    |> Stream.chunk_every(2, 1)
+    |> Enum.find_value(fn [prev, curr] -> if MapSet.equal?(prev, curr), do: curr end)
   end
 
-  defp iter_apply_rules(all_facts, rules, query_rule, derived, seen, previous_derived \\ %{}) do
-    fact_chunks =
-      Map.keys(all_facts) |> Stream.chunk_every(500) |> Stream.reject(&Map.has_key?(seen, &1))
-
-    # Limit the number of concurrent tasks
-    max_concurrency = 100
-    task_timeout = 30_000
-
-    {new_facts, new_derived} =
-      fact_chunks
-      |> Stream.chunk_every(max_concurrency)
-      |> Enum.map(fn chunk_group ->
-        Task.async(fn ->
-          Task.async_stream(
-            chunk_group,
-            fn chunk -> process_fact_chunk(chunk, all_facts, rules, derived) end,
-            timeout: task_timeout
-          )
-          |> Enum.to_list()
-        end)
-      end)
-      |> Task.await_many(task_timeout)
-      |> List.flatten()
-      |> Enum.reduce({%{}, derived}, fn {:ok, {fact_new_facts, fact_derived}}, {acc, d_acc} ->
-        {Map.merge(acc, fact_new_facts), Map.merge(d_acc, fact_derived)}
-      end)
-
-    updated_seen = update_seen(new_facts, seen)
-
-    # Check if no new facts are derived
-    if new_derived == previous_derived do
-      if query_rule do
-        Map.values(new_derived)
-      else
-        Map.values(all_facts)
-      end
-    else
-      new_total_facts = Map.merge(all_facts, new_derived)
-      iter_apply_rules(new_total_facts, rules, query_rule, %{}, updated_seen, new_derived)
-    end
-  end
-
-  defp process_fact_chunk(chunk, all_facts, rules, derived) do
-    Enum.reduce(chunk, {Map.new(), derived}, fn fact_key, {acc, d_acc} ->
-      fact = Map.fetch!(all_facts, fact_key)
-
-      Enum.reduce(all_facts, {acc, d_acc}, fn {_, existing_fact}, {acc_inner, d_acc_inner} ->
-        process_fact(fact, existing_fact, rules, acc_inner, d_acc_inner)
-      end)
+  defp apply_rules_once(facts, rules) do
+    Enum.reduce(rules, facts, fn rule, acc_facts ->
+      new_facts = apply_rule(rule, acc_facts)
+      MapSet.union(acc_facts, new_facts)
     end)
   end
 
-  defp update_seen(new_facts, seen) do
-    Map.merge(seen, new_facts, fn _, _, new -> new end)
+  defp apply_rule(%Rule{rule: rule_fn}, facts) do
+    case :erlang.fun_info(rule_fn)[:arity] do
+      1 ->
+        MapSet.new(
+          Enum.flat_map(facts, fn fact ->
+            try do
+              case rule_fn.(fact) do
+                nil -> []
+                new_fact -> [new_fact]
+              end
+            rescue
+              FunctionClauseError -> []
+            end
+          end)
+        )
+
+      2 ->
+        MapSet.new(
+          for fact1 <- facts,
+              fact2 <- facts,
+              fact1 != fact2,
+              new_fact <- try_apply_rule(rule_fn, fact1, fact2),
+              do: new_fact
+        )
+
+      _ ->
+        MapSet.new()
+    end
+  end
+
+  defp try_apply_rule(rule_fn, fact1, fact2) do
+    try do
+      case rule_fn.(fact1, fact2) do
+        nil -> []
+        new_fact -> [new_fact]
+      end
+    rescue
+      FunctionClauseError -> []
+    end
   end
 
   defp fact_key(fact) do
     {fact.object_id, fact.subject_id, fact.object_relation}
   end
-
-  defp process_fact(fact1, fact2, rules, acc, derived) do
-    Enum.reduce(rules, {acc, derived}, fn rule, {acc_inner, derived_inner} ->
-      apply_rule(fact1, fact2, rule, acc_inner, derived_inner)
-    end)
-  end
-
-  defp apply_rule(fact1, fact2, %Rule{rule: rule_fn}, acc, derived) do
-    case apply_rule_fn(rule_fn, fact1, fact2) do
-      nil ->
-        {acc, derived}
-
-      new_fact ->
-        fact_key = fact_key(new_fact)
-
-        if Map.has_key?(acc, fact_key) do
-          {acc, derived}
-        else
-          {Map.put(acc, fact_key, new_fact), Map.put(derived, fact_key, new_fact)}
-        end
-    end
-  rescue
-    FunctionClauseError -> {acc, derived}
-  end
-
-  defp apply_rule_fn(rule_fn, fact1, _fact2) when is_function(rule_fn, 1),
-    do: apply(rule_fn, [fact1])
-
-  defp apply_rule_fn(rule_fn, fact1, fact2) when is_function(rule_fn, 2),
-    do: apply(rule_fn, [fact1, fact2])
-
-  defp apply_rule_fn(_, _, _), do: nil
 end

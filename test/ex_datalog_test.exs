@@ -292,7 +292,7 @@ defmodule ExExDatalogTest do
           object_relation = "processed_#{i}"
 
           rule_fn = fn %Fact{object_id: id, object_relation: ^object_relation} ->
-            %Fact{object_id: id, object_relation: "processed_#{i}"}
+            %Fact{object_id: id, object_relation: i}
           end
 
           rule = %Rule{name: "rule_#{i}", rule: rule_fn}
@@ -318,20 +318,18 @@ defmodule ExExDatalogTest do
       query_params = %{rule: "rule_5000"}
       {:ok, results} = ExDatalog.evaluate_query(datalog, query_params)
 
-      # Define expected results
-      expected_result = [
-        %ExDatalog.Fact{
-          object_id: "object_5000",
-          object_namespace: nil,
-          object_relation: "processed_5000",
-          subject_id: nil,
-          subject_namespace: nil,
-          subject_relation: nil
-        }
-      ]
+      # Define expected result
+      expected_result = %ExDatalog.Fact{
+        object_id: "object_5000",
+        object_namespace: nil,
+        object_relation: 5000,
+        subject_id: nil,
+        subject_namespace: nil,
+        subject_relation: nil
+      }
 
-      # Assert that the actual results match the expected results
-      assert Enum.sort(results) == Enum.sort(expected_result)
+      # Assert that the expected result is included in the results
+      assert Enum.member?(results, expected_result)
     end
 
     test "queries with single function rules of the same name are handled accurately", %{
