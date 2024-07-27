@@ -33,36 +33,30 @@ defmodule ExDatalog do
 
   def evaluate_query(%ExDatalog{rules: rules, facts: facts}, %{rule: rule} = query) do
     matching_rules = get_matching_rules(rules, rule)
-
     initial_facts = MapSet.new(Map.values(facts))
 
-    all_facts = apply_rules(initial_facts, matching_rules)
-
-    derived_facts = MapSet.difference(all_facts, initial_facts)
-
-    {:ok, MapSet.to_list(apply_where_clause(derived_facts, query[:where]))}
+    if Enum.empty?(matching_rules) do
+      {:ok, []}
+    else
+      all_facts = apply_rules(initial_facts, matching_rules)
+      derived_facts = get_derived_facts(all_facts, initial_facts, matching_rules)
+      {:ok, MapSet.to_list(apply_where_clause(derived_facts, Map.get(query, :where)))}
+    end
   end
 
   def evaluate_query(_, _), do: {:error, :invalid_ExDatalog}
 
-  defp apply_where_clause(facts, nil), do: facts
-
-  defp apply_where_clause(facts, where_clause) do
-    MapSet.filter(facts, fn fact ->
-      Enum.all?(where_clause, fn {key, value} -> Map.get(fact, key) == value end)
-    end)
-  end
-
   defp get_matching_rules(rules, nil), do: rules
-
-  defp get_matching_rules(rules, relation) do
-    Enum.filter(rules, fn rule -> rule.name == relation end)
-  end
+  defp get_matching_rules(rules, rule), do: Enum.filter(rules, &(&1.name == to_string(rule)))
 
   defp apply_rules(facts, rules) do
-    Stream.iterate(facts, &apply_rules_once(&1, rules))
-    |> Stream.chunk_every(2, 1)
-    |> Enum.find_value(fn [prev, curr] -> if MapSet.equal?(prev, curr), do: curr end)
+    new_facts = apply_rules_once(facts, rules)
+
+    if MapSet.equal?(new_facts, facts) do
+      new_facts
+    else
+      apply_rules(new_facts, rules)
+    end
   end
 
   defp apply_rules_once(facts, rules) do
@@ -73,42 +67,6 @@ defmodule ExDatalog do
   end
 
   defp apply_rule(%Rule{function: rule_fn}, facts) when is_function(rule_fn, 1) do
-    try_apply_rule(rule_fn, facts)
-  end
-
-  defp apply_rule(%Rule{module: rule_module, function: function, arity: 1}, facts) do
-    rule_fn = fn fact -> apply(rule_module, function, [fact]) end
-    try_apply_rule(rule_fn, facts)
-  end
-
-  defp apply_rule(%Rule{function: rule_fn}, facts) when is_function(rule_fn, 2) do
-    MapSet.new(
-      for fact1 <- facts,
-          fact2 <- facts,
-          fact1 != fact2,
-          new_fact <- try_apply_rule(rule_fn, fact1, fact2),
-          do: new_fact
-    )
-  end
-
-  defp apply_rule(%Rule{module: rule_module, function: function, arity: 2}, facts) do
-    MapSet.new(
-      for fact1 <- facts,
-          fact2 <- facts,
-          fact1 != fact2,
-          new_fact <-
-            try_apply_rule(
-              fn a, b -> apply(rule_module, function, [a, b]) end,
-              fact1,
-              fact2
-            ),
-          do: new_fact
-    )
-  end
-
-  defp apply_rule(_rule_fn, _facts), do: MapSet.new()
-
-  defp try_apply_rule(rule_fn, facts) do
     MapSet.new(
       Enum.flat_map(facts, fn fact ->
         try do
@@ -123,6 +81,26 @@ defmodule ExDatalog do
     )
   end
 
+  defp apply_rule(%Rule{function: rule_fn}, facts) when is_function(rule_fn, 2) do
+    MapSet.new(
+      for fact1 <- facts,
+          fact2 <- facts,
+          fact1 != fact2,
+          new_fact <- try_apply_rule(rule_fn, fact1, fact2),
+          do: new_fact
+    )
+  end
+
+  defp apply_rule(%Rule{module: module, function: function, arity: 1}, facts) do
+    rule_fn = fn fact -> apply(module, function, [fact]) end
+    apply_rule(%Rule{function: rule_fn}, facts)
+  end
+
+  defp apply_rule(%Rule{module: module, function: function, arity: 2}, facts) do
+    rule_fn = fn fact1, fact2 -> apply(module, function, [fact1, fact2]) end
+    apply_rule(%Rule{function: rule_fn}, facts)
+  end
+
   defp try_apply_rule(rule_fn, fact1, fact2) do
     try do
       case rule_fn.(fact1, fact2) do
@@ -134,7 +112,58 @@ defmodule ExDatalog do
     end
   end
 
-  defp fact_key(fact) do
-    {fact.object_id, fact.subject_id, fact.object_relation}
+  defp get_derived_facts(all_facts, initial_facts, rules) do
+    derived = MapSet.difference(all_facts, initial_facts)
+
+    explicitly_derived =
+      MapSet.filter(all_facts, fn fact ->
+        Enum.any?(rules, &rule_derives_fact?(&1, fact, all_facts))
+      end)
+
+    MapSet.union(derived, explicitly_derived)
   end
+
+  defp rule_derives_fact?(rule, fact, all_facts) do
+    case rule do
+      %Rule{function: f} when is_function(f, 1) ->
+        try_apply_unary_rule(f, fact)
+
+      %Rule{function: f} when is_function(f, 2) ->
+        try_apply_binary_rule(f, fact, all_facts)
+
+      %Rule{module: m, function: f, arity: 1} ->
+        try_apply_unary_rule(&apply(m, f, [&1]), fact)
+
+      %Rule{module: m, function: f, arity: 2} ->
+        try_apply_binary_rule(&apply(m, f, [&1, &2]), fact, all_facts)
+    end
+  end
+
+  defp try_apply_unary_rule(rule_fn, fact) do
+    try do
+      rule_fn.(fact) == fact
+    rescue
+      FunctionClauseError -> false
+    end
+  end
+
+  defp try_apply_binary_rule(rule_fn, fact, all_facts) do
+    Enum.any?(all_facts, fn other_fact ->
+      try do
+        rule_fn.(fact, other_fact) == fact or rule_fn.(other_fact, fact) == fact
+      rescue
+        FunctionClauseError -> false
+      end
+    end)
+  end
+
+  defp apply_where_clause(facts, nil), do: facts
+
+  defp apply_where_clause(facts, where_clause) do
+    MapSet.filter(facts, fn fact ->
+      Enum.all?(where_clause, fn {key, value} -> Map.get(fact, key) == value end)
+    end)
+  end
+
+  defp fact_key(fact), do: {fact.object_id, fact.subject_id, fact.object_relation}
 end

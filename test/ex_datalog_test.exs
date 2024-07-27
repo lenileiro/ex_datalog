@@ -26,6 +26,33 @@ defmodule ExExDatalogTest do
       {:ok, datalog: datalog}
     end
 
+    test "valid rules and facts produce expected results for rule", %{datalog: datalog} do
+      rule_fn_1 = fn %Fact{object_relation: "parent"} = fact -> fact end
+
+      rule_1 = %Rule{name: "parent_rule", function: rule_fn_1}
+      {:ok, datalog} = ExDatalog.add_rule(datalog, rule_1)
+
+      # Add fact
+      {:ok, datalog} =
+        ExDatalog.add_fact(datalog, %Fact{
+          object_id: "Alice",
+          subject_id: "Bob",
+          object_relation: "parent"
+        })
+
+      # Create a query that will trigger these rules
+      query_params = %{rule: "parent_rule"}
+
+      # Evaluate the query
+      {:ok, results} = ExDatalog.evaluate_query(datalog, query_params)
+
+      expected_results = [
+        %Fact{object_id: "Alice", subject_id: "Bob", object_relation: "parent"}
+      ]
+
+      assert Enum.sort(results) == Enum.sort(expected_results)
+    end
+
     test "valid rules and facts produce expected ancestor results", %{datalog: datalog} do
       ancestor_rule_fn = fn
         %Fact{object_id: grandparent, subject_id: parent, object_relation: "parent"},
