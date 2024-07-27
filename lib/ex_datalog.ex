@@ -56,35 +56,32 @@ defmodule ExDatalog do
     end)
   end
 
-  defp apply_rule(%Rule{rule: rule_fn}, facts) do
-    case :erlang.fun_info(rule_fn)[:arity] do
-      1 ->
-        MapSet.new(
-          Enum.flat_map(facts, fn fact ->
-            try do
-              case rule_fn.(fact) do
-                nil -> []
-                new_fact -> [new_fact]
-              end
-            rescue
-              FunctionClauseError -> []
-            end
-          end)
-        )
-
-      2 ->
-        MapSet.new(
-          for fact1 <- facts,
-              fact2 <- facts,
-              fact1 != fact2,
-              new_fact <- try_apply_rule(rule_fn, fact1, fact2),
-              do: new_fact
-        )
-
-      _ ->
-        MapSet.new()
-    end
+  defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 1) do
+    MapSet.new(
+      Enum.flat_map(facts, fn fact ->
+        try do
+          case rule_fn.(fact) do
+            nil -> []
+            new_fact -> [new_fact]
+          end
+        rescue
+          FunctionClauseError -> []
+        end
+      end)
+    )
   end
+
+  defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 2) do
+    MapSet.new(
+      for fact1 <- facts,
+          fact2 <- facts,
+          fact1 != fact2,
+          new_fact <- try_apply_rule(rule_fn, fact1, fact2),
+          do: new_fact
+    )
+  end
+
+  defp apply_rule(_rule_fn, _facts), do: MapSet.new()
 
   defp try_apply_rule(rule_fn, fact1, fact2) do
     try do
