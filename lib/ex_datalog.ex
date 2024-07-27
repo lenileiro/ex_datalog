@@ -10,6 +10,17 @@ defmodule ExDatalog do
     {:ok, %ExDatalog{exDatalog | rules: [rule | rules]}}
   end
 
+  def add_rule(%ExDatalog{rules: rules} = exDatalog, rule_module) when is_atom(rule_module) do
+    new_rules =
+      rule_module.__info__(:functions)
+      |> Enum.filter(fn {_name, arity} -> arity == 2 or arity == 1 end)
+      |> Enum.map(fn {name, arity} ->
+        %Rule{name: to_string(name), rule: rule_module, function: name, arity: arity}
+      end)
+
+    {:ok, %ExDatalog{exDatalog | rules: rules ++ new_rules}}
+  end
+
   def add_rule(_, _), do: {:error, :invalid_rule}
 
   def add_fact(%ExDatalog{facts: facts} = exDatalog, %Fact{} = fact) do
@@ -57,6 +68,42 @@ defmodule ExDatalog do
   end
 
   defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 1) do
+    try_apply_rule(rule_fn, facts)
+  end
+
+  defp apply_rule(%Rule{rule: rule_module, function: function, arity: 1}, facts) do
+    rule_fn = fn fact -> apply(rule_module, function, [fact]) end
+    try_apply_rule(rule_fn, facts)
+  end
+
+  defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 2) do
+    MapSet.new(
+      for fact1 <- facts,
+          fact2 <- facts,
+          fact1 != fact2,
+          new_fact <- try_apply_rule(rule_fn, fact1, fact2),
+          do: new_fact
+    )
+  end
+
+  defp apply_rule(%Rule{rule: rule_module, function: function, arity: 2}, facts) do
+    MapSet.new(
+      for fact1 <- facts,
+          fact2 <- facts,
+          fact1 != fact2,
+          new_fact <-
+            try_apply_rule(
+              fn a, b -> apply(rule_module, function, [a, b]) end,
+              fact1,
+              fact2
+            ),
+          do: new_fact
+    )
+  end
+
+  defp apply_rule(_rule_fn, _facts), do: MapSet.new()
+
+  defp try_apply_rule(rule_fn, facts) do
     MapSet.new(
       Enum.flat_map(facts, fn fact ->
         try do
@@ -70,18 +117,6 @@ defmodule ExDatalog do
       end)
     )
   end
-
-  defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 2) do
-    MapSet.new(
-      for fact1 <- facts,
-          fact2 <- facts,
-          fact1 != fact2,
-          new_fact <- try_apply_rule(rule_fn, fact1, fact2),
-          do: new_fact
-    )
-  end
-
-  defp apply_rule(_rule_fn, _facts), do: MapSet.new()
 
   defp try_apply_rule(rule_fn, fact1, fact2) do
     try do

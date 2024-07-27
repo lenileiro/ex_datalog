@@ -5,6 +5,21 @@ defmodule ExExDatalogTest do
   alias ExDatalog.Rule
   alias ExDatalog.Fact
 
+  defmodule AncestorRule do
+    def ancestor(
+          %Fact{object_id: grandparent, subject_id: parent, object_relation: "parent"},
+          %Fact{object_id: parent, subject_id: descendant, object_relation: "parent"}
+        ) do
+      %Fact{
+        object_id: grandparent,
+        object_namespace: "user",
+        subject_id: descendant,
+        subject_namespace: "user",
+        object_relation: "ancestor"
+      }
+    end
+  end
+
   describe "evaluate_query/2" do
     setup do
       datalog = ExDatalog.new()
@@ -26,6 +41,45 @@ defmodule ExExDatalogTest do
 
       ancestor_rule = %Rule{name: "ancestor", rule: ancestor_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule)
+
+      {:ok, datalog} =
+        ExDatalog.add_fact(datalog, %Fact{
+          object_id: "Alice",
+          object_namespace: "user",
+          subject_id: "Bob",
+          subject_namespace: "user",
+          object_relation: "parent"
+        })
+
+      {:ok, datalog} =
+        ExDatalog.add_fact(datalog, %Fact{
+          object_id: "Bob",
+          object_namespace: "user",
+          subject_id: "Charlie",
+          subject_namespace: "user",
+          object_relation: "parent"
+        })
+
+      query_params = %{rule: "ancestor"}
+      {:ok, results} = ExDatalog.evaluate_query(datalog, query_params)
+
+      expected_results = [
+        %Fact{
+          object_id: "Alice",
+          object_namespace: "user",
+          subject_id: "Charlie",
+          object_relation: "ancestor",
+          subject_namespace: "user"
+        }
+      ]
+
+      assert Enum.sort(results) == Enum.sort(expected_results)
+    end
+
+    test "valid rules and facts produce expected ancestor results for rule module", %{
+      datalog: datalog
+    } do
+      {:ok, datalog} = ExDatalog.add_rule(datalog, AncestorRule)
 
       {:ok, datalog} =
         ExDatalog.add_fact(datalog, %Fact{
