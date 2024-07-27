@@ -1,3 +1,3 @@
 defmodule ExDatalog.Rule do
-  defstruct [:name, :rule, :function, :arity]
+  defstruct [:name, :module, :function, :arity]
 end

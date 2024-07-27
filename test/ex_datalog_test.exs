@@ -39,7 +39,7 @@ defmodule ExExDatalogTest do
           }
       end
 
-      ancestor_rule = %Rule{name: "ancestor", rule: ancestor_rule_fn}
+      ancestor_rule = %Rule{name: "ancestor", function: ancestor_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule)
 
       {:ok, datalog} =
@@ -139,7 +139,7 @@ defmodule ExExDatalogTest do
           }
       end
 
-      grandparent_rule = %Rule{name: "grandparent_rule", rule: grandparent_rule_fn}
+      grandparent_rule = %Rule{name: "grandparent_rule", function: grandparent_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, grandparent_rule)
 
       # Add parent relationship facts
@@ -180,7 +180,7 @@ defmodule ExExDatalogTest do
           %Fact{object_id: parent, subject_id: child, object_relation: "ancestor"}
       end
 
-      parent_rule = %Rule{name: "ancestor_rule", rule: parent_rule_fn}
+      parent_rule = %Rule{name: "ancestor_rule", function: parent_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, parent_rule)
 
       # Rule for extending ancestor relationships
@@ -190,7 +190,7 @@ defmodule ExExDatalogTest do
           %Fact{object_id: ancestor, subject_id: descendant, object_relation: "ancestor"}
       end
 
-      extended_ancestor_rule = %Rule{name: "ancestor_rule", rule: extended_ancestor_rule_fn}
+      extended_ancestor_rule = %Rule{name: "ancestor_rule", function: extended_ancestor_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, extended_ancestor_rule)
 
       # Add facts for a family tree
@@ -243,7 +243,7 @@ defmodule ExExDatalogTest do
           %Fact{object_id: id, object_relation: "result1"}
       end
 
-      rule_1 = %Rule{name: "multi_match_rule", rule: rule_fn_1}
+      rule_1 = %Rule{name: "multi_match_rule", function: rule_fn_1}
       {:ok, datalog} = ExDatalog.add_rule(datalog, rule_1)
 
       # Define second rule
@@ -252,7 +252,7 @@ defmodule ExExDatalogTest do
           %Fact{object_id: id, object_relation: "result2"}
       end
 
-      rule_2 = %Rule{name: "multi_match_rule", rule: rule_fn_2}
+      rule_2 = %Rule{name: "multi_match_rule", function: rule_fn_2}
       {:ok, datalog} = ExDatalog.add_rule(datalog, rule_2)
 
       # Add facts
@@ -300,7 +300,7 @@ defmodule ExExDatalogTest do
       end
 
       # Add complex rule
-      complex_rule = %Rule{name: "complex_relation", rule: complex_rule_fn}
+      complex_rule = %Rule{name: "complex_relation", function: complex_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, complex_rule)
 
       # Add facts
@@ -349,7 +349,7 @@ defmodule ExExDatalogTest do
             %Fact{object_id: id, object_relation: i}
           end
 
-          rule = %Rule{name: "rule_#{i}", rule: rule_fn}
+          rule = %Rule{name: "rule_#{i}", function: rule_fn}
 
           case ExDatalog.add_rule(acc, rule) do
             {:ok, updated_datalog} -> updated_datalog
@@ -399,8 +399,8 @@ defmodule ExExDatalogTest do
           %Fact{object_id: object_id, subject_id: subject_id, object_relation: "result2"}
       end
 
-      rule_1 = %Rule{name: "same_name_rule", rule: rule_fn_1}
-      rule_2 = %Rule{name: "same_name_rule", rule: rule_fn_2}
+      rule_1 = %Rule{name: "same_name_rule", function: rule_fn_1}
+      rule_2 = %Rule{name: "same_name_rule", function: rule_fn_2}
 
       {:ok, datalog} = ExDatalog.add_rule(datalog, rule_1)
       {:ok, datalog} = ExDatalog.add_rule(datalog, rule_2)
@@ -445,8 +445,8 @@ defmodule ExExDatalogTest do
           %Fact{object_id: admin, object_relation: "leader_of", subject_id: employee}
       end
 
-      admin_rule_1 = %Rule{name: "admin_rule", rule: admin_rule_fn_1}
-      admin_rule_2 = %Rule{name: "admin_rule", rule: admin_rule_fn_2}
+      admin_rule_1 = %Rule{name: "admin_rule", function: admin_rule_fn_1}
+      admin_rule_2 = %Rule{name: "admin_rule", function: admin_rule_fn_2}
 
       {:ok, datalog} = ExDatalog.add_rule(datalog, admin_rule_1)
       {:ok, datalog} = ExDatalog.add_rule(datalog, admin_rule_2)
@@ -508,7 +508,7 @@ defmodule ExExDatalogTest do
           }
       end
 
-      parent_rule = %Rule{name: "parent", rule: parent_rule_fn}
+      parent_rule = %Rule{name: "parent", function: parent_rule_fn}
       {:ok, datalog} = ExDatalog.add_rule(datalog, parent_rule)
 
       ancestor_rule_fn_1 = fn
@@ -540,9 +540,9 @@ defmodule ExExDatalogTest do
           }
       end
 
-      ancestor_rule_1 = %Rule{name: "ancestor", rule: ancestor_rule_fn_1}
-      ancestor_rule_2 = %Rule{name: "ancestor", rule: ancestor_rule_fn_2}
-      ancestor_rule_3 = %Rule{name: "ancestor", rule: ancestor_rule_fn_3}
+      ancestor_rule_1 = %Rule{name: "ancestor", function: ancestor_rule_fn_1}
+      ancestor_rule_2 = %Rule{name: "ancestor", function: ancestor_rule_fn_2}
+      ancestor_rule_3 = %Rule{name: "ancestor", function: ancestor_rule_fn_3}
 
       {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule_1)
       {:ok, datalog} = ExDatalog.add_rule(datalog, ancestor_rule_2)

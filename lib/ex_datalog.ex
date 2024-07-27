@@ -15,7 +15,7 @@ defmodule ExDatalog do
       rule_module.__info__(:functions)
       |> Enum.filter(fn {_name, arity} -> arity == 2 or arity == 1 end)
       |> Enum.map(fn {name, arity} ->
-        %Rule{name: to_string(name), rule: rule_module, function: name, arity: arity}
+        %Rule{name: to_string(name), module: rule_module, function: name, arity: arity}
       end)
 
     {:ok, %ExDatalog{exDatalog | rules: rules ++ new_rules}}
@@ -67,16 +67,16 @@ defmodule ExDatalog do
     end)
   end
 
-  defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 1) do
+  defp apply_rule(%Rule{function: rule_fn}, facts) when is_function(rule_fn, 1) do
     try_apply_rule(rule_fn, facts)
   end
 
-  defp apply_rule(%Rule{rule: rule_module, function: function, arity: 1}, facts) do
+  defp apply_rule(%Rule{module: rule_module, function: function, arity: 1}, facts) do
     rule_fn = fn fact -> apply(rule_module, function, [fact]) end
     try_apply_rule(rule_fn, facts)
   end
 
-  defp apply_rule(%Rule{rule: rule_fn}, facts) when is_function(rule_fn, 2) do
+  defp apply_rule(%Rule{function: rule_fn}, facts) when is_function(rule_fn, 2) do
     MapSet.new(
       for fact1 <- facts,
           fact2 <- facts,
@@ -86,7 +86,7 @@ defmodule ExDatalog do
     )
   end
 
-  defp apply_rule(%Rule{rule: rule_module, function: function, arity: 2}, facts) do
+  defp apply_rule(%Rule{module: rule_module, function: function, arity: 2}, facts) do
     MapSet.new(
       for fact1 <- facts,
           fact2 <- facts,
