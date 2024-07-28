@@ -25,7 +25,7 @@ defmodule ExDatalog.Perm do
     module_ast = ExDatalog.RuleGenerator.create_module(parsed, calling_module)
 
     case Code.compile_quoted(module_ast) do
-      [{module, _bytecode}] when is_atom(module) -> {:ok, parsed}
+      [{module, _bytecode}] when is_atom(module) -> :ok
       other -> {:error, "Unexpected compilation result: #{inspect(other)}"}
     end
   end
