@@ -22,11 +22,11 @@ defmodule ExDatalog.Perm do
   def validate_and_generate_rules(parsed, calling_module) when is_list(parsed) do
     Enum.each(parsed, &validate_rule_structure/1)
 
-    code =
-      ExDatalog.RuleGenerator.generate_module_code(parsed, calling_module)
+    module_ast = ExDatalog.RuleGenerator.create_module(parsed, calling_module)
 
-    case eval_code(code) do
-      {:ok, _module} -> {:ok, parsed}
+    case Code.compile_quoted(module_ast) do
+      [{module, _bytecode}] when is_atom(module) -> {:ok, parsed}
+      other -> {:error, "Unexpected compilation result: #{inspect(other)}"}
     end
   end
 
@@ -59,10 +59,5 @@ defmodule ExDatalog.Perm do
 
   defp validate_conclusion(_) do
     raise "Each conclusion must be a list of 6 elements"
-  end
-
-  defp eval_code(code) do
-    {result, _bindings} = Code.eval_string(code)
-    {:ok, result}
   end
 end
