@@ -2,6 +2,8 @@
 
 ExDatalog is a library for defining and querying facts and rules in a Datalog-inspired logic programming system. It allows users to create complex logical rules and infer new facts based on these rules and the existing facts.
 
+ExDatalog is a library for defining and querying facts and rules in a Datalog-inspired modelled as ReBAC (Relationship-Based Access Control).
+
 ### Installation
 
 To use ExDatalog in your project, add it to your dependencies:
@@ -145,7 +147,7 @@ This includes facts inferred by the parent and ancestor rules:
 
 #### Querying with Specific Conditions
 
-You can also query with specific conditions using the where clause. For example, to fild all where Alice matches the any rule:
+You can also query with specific conditions using the where clause. For example, to find all where Alice matches the any rule:
 
 ```elixir
 {:ok, results} = ExDatalog.evaluate_query(datalog, %{rule: "*", where: %{object_id: "Alice"}})
@@ -173,6 +175,18 @@ This should output:
    }
  ]
 ```
+
+### Inspiration
+
+ExDatalog draws inspiration from several advanced systems and concepts in the field of access control and logical inference:
+
+#### Google Zanzibar
+
+Google Zanzibar is a consistent, highly available, and massively scalable global authorization system used by Google to manage permissions across its services. For more details, you can refer to the (Google Zanzibar whitepaper)[https://research.google/pubs/pub48190/].
+
+#### Permify
+
+Permify is an open-source authorization service that provides a Zanzibar-like experience for developers. It simplifies complex permission management using a rule-based approach. For more insights, you can read about it (here)[https://permify.co/post/google-zanzibar-in-a-nutshell/].
 
 ### Conclusion
 
