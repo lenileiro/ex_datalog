@@ -176,4 +176,4 @@ This should output:
 
 ### Conclusion
 
-ExDatalog provides a flexible and powerful way to define and query logical rules and facts. By using rules and facts, you can model complex relationships and make inferences in various domains, such as, authorization, organizational management, project leadership, and more.
+ExDatalog provides a flexible and powerful way to define and query logical rules and facts. By using rules and facts, you can model complex relationships and make inferences in various domains, such as, authorization, organizational management, fraud detection, and more.
