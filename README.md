@@ -182,11 +182,11 @@ ExDatalog draws inspiration from several advanced systems and concepts in the fi
 
 #### Google Zanzibar
 
-Google Zanzibar is a consistent, highly available, and massively scalable global authorization system used by Google to manage permissions across its services. For more details, you can refer to the (Google Zanzibar whitepaper)[https://research.google/pubs/pub48190/].
+Google Zanzibar is a consistent, highly available, and massively scalable global authorization system used by Google to manage permissions across its services. For more details, you can refer to the [Google Zanzibar whitepaper](https://research.google/pubs/pub48190/).
 
 #### Permify
 
-Permify is an open-source authorization service that provides a Zanzibar-like experience for developers. It simplifies complex permission management using a rule-based approach. For more insights, you can read about it (here)[https://permify.co/post/google-zanzibar-in-a-nutshell/].
+Permify is an open-source authorization service that provides a Zanzibar-like experience for developers. It simplifies complex permission management using a rule-based approach. For more insights, you can read about it [here](https://permify.co/post/google-zanzibar-in-a-nutshell/).
 
 ### Conclusion
 
