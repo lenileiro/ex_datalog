@@ -1,8 +1,8 @@
-### ExDatalog
+## ExDatalog
 
 ExDatalog is a library for defining and querying facts and rules in a Datalog-inspired logic programming system. It allows users to create complex logical rules and infer new facts based on these rules and the existing facts.
 
-#### Installation
+### Installation
 
 To use ExDatalog in your project, add it to your dependencies:
 
@@ -14,9 +14,9 @@ def deps do
 end
 ```
 
-#### Usage
+### Usage
 
-##### Defining Rules
+#### Defining Rules and Facts
 
 Let's start by defining some rules. We will use a module-based approach to encapsulate our rules.
 
@@ -52,7 +52,7 @@ defmodule AncestorRules do
 end
 ```
 
-##### Adding Facts
+#### Adding Facts
 
 Next, we add facts representing the family tree of individuals.
 
@@ -102,7 +102,7 @@ This should output:
  ]
 ```
 
-##### Querying with Wildcards
+#### Querying with Wildcards
 
 You can use the wildcard \* to query all facts inferred by any rule:
 
@@ -143,7 +143,7 @@ This includes facts inferred by the parent and ancestor rules:
  ]
 ```
 
-##### Querying with Specific Conditions
+#### Querying with Specific Conditions
 
 You can also query with specific conditions using the where clause. For example, to fild all where Alice matches the any rule:
 
@@ -174,6 +174,6 @@ This should output:
  ]
 ```
 
-##### Conclusion
+#### Conclusion
 
 ExDatalog provides a flexible and powerful way to define and query logical rules and facts. By using rules and facts, you can model complex relationships and make inferences in various domains, such as, authorization, organizational management, project leadership, and more.
