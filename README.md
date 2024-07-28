@@ -79,7 +79,7 @@ datalog = ExDatalog.new()
   })
 ```
 
-##### Querying Facts
+#### Querying Facts
 
 To derive new facts based on the rules and facts, you can run queries. For example, to find all ancestors:
 
@@ -174,6 +174,6 @@ This should output:
  ]
 ```
 
-#### Conclusion
+### Conclusion
 
 ExDatalog provides a flexible and powerful way to define and query logical rules and facts. By using rules and facts, you can model complex relationships and make inferences in various domains, such as, authorization, organizational management, project leadership, and more.
