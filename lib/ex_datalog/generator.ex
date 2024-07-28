@@ -6,63 +6,103 @@ defmodule ExDatalog.RuleGenerator do
   @doc """
   Generates the module code containing all the permission rules.
   """
-  def generate_module_code(rules) do
+  def generate_module_code(rules, module_name) do
     functions = Enum.map(rules, &generate_rule_function/1)
 
     """
-    defmodule ExDatalog.Perm.Rules do
+    defmodule #{module_name}.Rules do
     #{Enum.join(functions, "\n\n")}
     end
     """
   end
 
-  defp generate_rule_function(rule) do
-    %{"name" => name, "conditions" => conditions, "conclusions" => [conclusion]} = rule
+  def generate_rule_function(rule) do
+    name = rule["name"]
+    conditions = rule["conditions"]
+    conclusion = List.first(rule["conclusions"])
 
-    function_body =
-      if length(conditions) == 1 do
-        generate_single_condition_function(name, List.first(conditions), conclusion)
-      else
-        generate_double_condition_function(name, conditions, conclusion)
-      end
-
-    " #{function_body}"
+    if length(conditions) == 1 do
+      generate_single_condition_function(name, List.first(conditions), conclusion)
+    else
+      generate_double_condition_function(name, conditions, conclusion)
+    end
   end
 
-  defp generate_single_condition_function(name, condition, conclusion) do
+  def generate_single_condition_function(name, condition, conclusion) do
     static_matches = extract_static_matches(condition)
-
     args = "arg0 = %{#{Enum.join(static_matches, ", ")}}"
     result = generate_result(conclusion, [condition])
 
     """
     def #{name}(#{args}) do
-    #{result}
+      #{result}
     end
     """
   end
 
-  defp generate_double_condition_function(name, [condition1, condition2], conclusion) do
-    static_matches1 = extract_static_matches(condition1)
-    static_matches2 = extract_static_matches(condition2)
-    shared_vars = find_shared_variables(condition1, condition2)
-
-    args1 = static_matches1 ++ shared_vars
-    args2 = static_matches2 ++ shared_vars
-
-    arg_string1 = "arg0 = %{#{Enum.join(args1, ", ")}}"
-    arg_string2 = "arg1 = %{#{Enum.join(args2, ", ")}}"
+  def generate_double_condition_function(name, [condition1, condition2], conclusion) do
+    ignored_vars_1 = find_ignored_variables(condition1, condition2)
+    ignored_vars_2 = find_ignored_variables(condition2, condition1)
+    arg1 = generate_arg_pattern(condition1, 0, ignored_vars_1)
+    arg2 = generate_arg_pattern(condition2, 1, ignored_vars_2)
 
     result = generate_result(conclusion, [condition1, condition2])
 
     """
-    def #{name}(#{arg_string1}, #{arg_string2}) do
-    #{result}
+    def #{name}(#{arg1}, #{arg2}) do
+      #{result}
     end
     """
   end
 
-  defp extract_static_matches(condition) do
+  def find_ignored_variables(condition1, condition2) do
+    vars1 = extract_variables(condition1)
+    vars2 = extract_variables(condition2)
+
+    MapSet.difference(vars1, vars2)
+    |> Enum.map(fn var ->
+      index = Enum.find_index(condition1, &(&1 == "$#{var}"))
+
+      key =
+        Enum.at(
+          [
+            :object_namespace,
+            :object_id,
+            :object_relation,
+            :subject_namespace,
+            :subject_id,
+            :subject_relation
+          ],
+          index
+        )
+
+      "#{key}: #{var}"
+    end)
+  end
+
+  defp generate_arg_pattern(condition, index, ignored_vars) do
+    pattern =
+      condition
+      |> Enum.zip([
+        :object_namespace,
+        :object_id,
+        :object_relation,
+        :subject_namespace,
+        :subject_id,
+        :subject_relation
+      ])
+      |> Enum.map(fn
+        {"$" <> var, key} -> "#{key}: #{var}"
+        {nil, key} -> "#{key}: nil"
+        {value, key} when is_binary(value) -> "#{key}: \"#{value}\""
+      end)
+      |> Enum.filter(&(&1 not in ignored_vars))
+      |> Enum.join(", ")
+
+    "arg#{index} = %{#{pattern}}"
+  end
+
+  def extract_static_matches(condition) do
     condition
     |> Enum.zip([
       :object_namespace,
@@ -80,7 +120,7 @@ defmodule ExDatalog.RuleGenerator do
     end)
   end
 
-  defp find_shared_variables(condition1, condition2) do
+  def find_shared_variables(condition1, condition2) do
     vars1 = extract_variables(condition1)
     vars2 = extract_variables(condition2)
 
@@ -103,14 +143,14 @@ defmodule ExDatalog.RuleGenerator do
     end)
   end
 
-  defp extract_variables(condition) do
+  def extract_variables(condition) do
     condition
     |> Enum.filter(&(is_binary(&1) and String.starts_with?(&1, "$")))
     |> Enum.map(&String.trim_leading(&1, "$"))
     |> MapSet.new()
   end
 
-  defp generate_result(conclusion, conditions) do
+  def generate_result(conclusion, conditions) do
     vars =
       [
         :object_namespace,
@@ -124,26 +164,41 @@ defmodule ExDatalog.RuleGenerator do
       |> Enum.map(fn {key, value} ->
         case value do
           "$" <> var ->
-            arg_index =
-              if length(conditions) > 1 and
-                   Enum.at(List.last(conditions), Enum.find_index(conclusion, &(&1 == value))) ==
-                     value,
-                 do: 1,
-                 else: 0
-
-            "  #{key}: arg#{arg_index}.#{var}"
+            {arg_index, source_key} = find_source(var, conditions)
+            "#{key}: arg#{arg_index}.#{source_key}"
 
           nil ->
-            "  #{key}: nil"
+            "#{key}: nil"
 
           value when is_binary(value) ->
-            "  #{key}: \"#{value}\""
+            "#{key}: \"#{value}\""
 
           _ ->
-            "  #{key}: _"
+            "#{key}: _"
         end
       end)
 
-    " %{\n#{Enum.join(vars, ",\n")}\n }"
+    "%ExDatalog.Fact{\n  #{Enum.join(vars, ",\n  ")}\n}"
+  end
+
+  defp find_source(var, conditions) do
+    Enum.with_index(conditions)
+    |> Enum.find_value(fn {condition, index} ->
+      source_key =
+        Enum.zip(
+          [
+            :object_namespace,
+            :object_id,
+            :object_relation,
+            :subject_namespace,
+            :subject_id,
+            :subject_relation
+          ],
+          condition
+        )
+        |> Enum.find(fn {_, value} -> value == "$#{var}" end)
+
+      if source_key, do: {index, elem(source_key, 0)}
+    end)
   end
 end

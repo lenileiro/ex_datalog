@@ -5,19 +5,23 @@ defmodule ExExDatalogTest do
   alias ExDatalog.Rule
   alias ExDatalog.Fact
 
-  defmodule AncestorRule do
-    def ancestor(
-          %Fact{object_id: grandparent, subject_id: parent, object_relation: "parent"},
-          %Fact{object_id: parent, subject_id: descendant, object_relation: "parent"}
-        ) do
-      %Fact{
-        object_id: grandparent,
-        object_namespace: "user",
-        subject_id: descendant,
-        subject_namespace: "user",
-        object_relation: "ancestor"
+  defmodule AncestorRules do
+    use ExDatalog
+
+    ~PERM"""
+    [
+      {
+        "name": "ancestor",
+        "conditions": [
+          ["$on1", "$grandparent", "parent", "$sn1", "$parent", null],
+          ["$on2", "$parent", "parent", "$sn2", "$descendant", null]
+        ],
+        "conclusions": [
+          ["user", "$grandparent", "ancestor", "user", "$descendant", null]
+        ]
       }
-    end
+    ]
+    """
   end
 
   describe "evaluate_query/2" do
@@ -106,7 +110,7 @@ defmodule ExExDatalogTest do
     test "valid rules and facts produce expected ancestor results for rule module", %{
       datalog: datalog
     } do
-      {:ok, datalog} = ExDatalog.add_rule(datalog, AncestorRule)
+      {:ok, datalog} = ExDatalog.add_rule(datalog, AncestorRules)
 
       {:ok, datalog} =
         ExDatalog.add_fact(datalog, %Fact{

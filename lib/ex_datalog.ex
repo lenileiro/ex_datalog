@@ -4,6 +4,12 @@ defmodule ExDatalog do
   alias ExDatalog.{Fact, Rule}
   alias __MODULE__
 
+  defmacro __using__(_opts) do
+    quote do
+      import ExDatalog.Perm, only: [sigil_PERM: 2]
+    end
+  end
+
   def new, do: %__MODULE__{}
 
   def add_rule(%ExDatalog{rules: rules} = exDatalog, %Rule{} = rule) do
@@ -11,6 +17,8 @@ defmodule ExDatalog do
   end
 
   def add_rule(%ExDatalog{rules: rules} = exDatalog, rule_module) when is_atom(rule_module) do
+    rule_module = Module.concat(rule_module, Rules)
+
     new_rules =
       rule_module.__info__(:functions)
       |> Enum.filter(fn {_name, arity} -> arity == 2 or arity == 1 end)
